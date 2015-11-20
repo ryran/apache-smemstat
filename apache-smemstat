@@ -1,0 +1,126 @@
+#!/bin/bash
+# apache-smemstat v0.1.0 last mod 2015/11/20
+# Latest version at <http://github.com/ryran/apache-smemstat>
+#-------------------------------------------------------------------------------
+# Copyright 2015 Ryan Sawhill Aroha <rsaw@redhat.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#-------------------------------------------------------------------------------
+
+# Get version from line #2
+version=$(sed '2q;d' $0)
+
+# Set defaults
+if [[ -n ${pFilter} ]]; then
+    [[ -z ${uFilter} ]] && uFilter="$(whoami)$"
+else
+    pFilter="^/usr/sbin/httpd"
+fi
+: ${uFilter:="^apache$"}
+
+print_help() {
+    cat <<EOF
+Usage: apache-smemstat [-t|--timestamp]
+Print a 1-line summary about memory usage of apache httpd processes
+
+The smem command is required in order to take shared memory into account. In
+RHEL, the smem package is available from EPEL.
+
+Example usage:
+  
+  # apache-smemstat
+  apache httpd |  120 total PIDs |   3.9 MiB/each avg |   464.5 MiB total
+
+Switch out the "apache httpd" for a timestamp with an optional -t:
+  
+  # apache-smemstat -t
+  2015-11-19 23:40:39 |  120 total PIDs |   3.9 MiB/each avg |   464.5 MiB total
+
+Or customize the "header" environment variable:
+  
+  # header=$(date +%s) apache-smemstat
+  1448000502 |  120 total PIDs |   3.9 MiB/each avg |   464.5 MiB total
+
+Note that the environment variables "pFilter" (process filter) and "uFilter"
+(user filter) can be tweaked to change behavior altogether -- e.g., to watch
+processes other than httpd. Each is passed as an argument to smem's -P and -U
+options (respectively) -- where they will be treated as regular expressions.
+Defaults:
+  
+  pFilter="^/usr/sbin/httpd"
+  uFilter="^apache$"
+
+If pFilter is modified and uFilter is not, then uFilter will be reset to match
+the current user. Examples:
+  
+  $ pFilter=^bash apache-smemstat
+  Warning: running as non-root; only able to inspect own (rsaw) processes
+  ^bash |    3 total PIDs |   3.6 MiB/each avg |    11.5 MiB total
+  
+  $ pFilter=^/opt/google/chrome/chrome apache-smemstat -t 2>/dev/null
+  2015-11-20 00:47:26 |   12 total PIDs |  25.2 MiB/each avg |   391.8 MiB total
+  
+  # header="login screens" pFilter='^/sbin/(a|min)getty' apache-smemstat -t
+  login screens |    6 total PIDs |   0.1 MiB/each avg |     0.5 MiB total
+
+See also related utilities: smem, smemstat, pidstat
+
+Version info: ${version:2}
+See <github.com/ryran/apache-smemstat> to report bugs/suggestions or kudos
+EOF
+}
+
+until [[ -z ${1} ]]; do
+    case ${1} in
+        -t|--timestamp*)
+            doTimestamp=yes
+            shift
+            ;;
+        *)
+            print_help
+            exit 1
+    esac
+done
+
+if ! command -v smem >/dev/null; then
+    echo Error: required smem command not available
+    echo In RHEL, it can be installed from EPEL
+    exit 2
+fi
+
+if [[ $(id -u) != 0 ]]; then
+    echo "Warning: running as non-root; only able to inspect own ($(whoami)) processes" >&2
+fi
+
+if [[ ${doTimestamp} == yes ]]; then
+    header=$(date "+%F %T")
+elif [[ -z ${header} ]]; then
+    if [[ ${pFilter} == ^/usr/sbin/httpd ]]; then
+        header="apache httpd"
+    else
+        header="${pFilter}"
+    fi
+fi
+
+smem -U "${uFilter}" -P "${pFilter}" -t -c "pid uss pss" -H |
+    awk -v header="${header}" '
+        END {
+            printf "%s | ", header
+            printf "%4d total PIDs | ", $1
+            if ($1==0)
+                printf "%5.1f MiB/each avg | %7.1f MiB total\n", 0, 0
+            else {
+                printf "%5.1f MiB/each avg | ", $2/$1/1024
+                printf "%7.1f MiB total\n", $3/1024
+            }
+        }'
