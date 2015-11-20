@@ -46,7 +46,7 @@ Total:     0.0 B  2308.0 K  3620.0 K    23.2 M
 ### Wait, so what's apache-smemstat?
 This is is a way to quickly summarize smemstat-like information about all httpd processes into a single column-separated line -- e.g., for writing out to a log file regularly.
 
-Here's what the help page, including some examples.
+Here's what the help page look like, including some examples.
 
 ```
 $ apache-smemstat -h
