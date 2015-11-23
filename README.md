@@ -2,11 +2,11 @@
 Use smem to print an accurate 1-line summary about memory usage of apache httpd processes
 
 ### Why?
-Unfortunately, none of the standard tools in Linux (`top`, `ps`, `/pidstat`) currently have the ability to print unique RAM usage per process; instead, they always print RSS which includes shared memory, like shared libraries used by multiple processes (e.g., libc). That means that if you sum up the RSS of multiple processes on your system, you'll be over-counting.  
+Unfortunately, none of the standard tools in Linux (`top`, `ps`, `pidstat`) currently have the ability to print unique RAM usage per process; instead, they always print RSS which includes shared memory, like shared libraries used by multiple processes (e.g., libc). That means that if you sum up the RSS of multiple processes on your system, you'll be over-counting.  
 
 For processes like Apache httpd and Google Chrome that fork tons of times to serve their users, this is even more dramatic. On my system right now, the total RSS sum of all Google Chrome processes is 876 MiB; however, when I take shared memory into account, I can see that it's actually only 394 MiB.
 
-When calculating MPM parameters for Apache httpd, it's pretty important to get accurate data of the current state of things. An unloaded httpd service on RHEL 6 configured with `MinSpareServers 120` uses 294 MiB (2.4 MiB/process) -- if I look at RSS. When I take shared memory into account, it's clear that each (unloaded) process is only using 148 KiB, and then a bit is shared across all of them, for an accurate total usage of 19.4 MiB.
+When calculating MPM parameters for Apache httpd, it's pretty important to get accurate data of the current state of things. An unloaded httpd service on my RHEL 6 VM configured with `MinSpareServers 120` uses 294 MiB (2.4 MiB/process) -- if I look at RSS. When I take shared memory into account, it's clear that each (unloaded) process is only using 148 KiB, and then a bit is shared across all of them, for an accurate total usage of 19.4 MiB.
 
 ### How?
 While none of the standard tools show this information, it is thankfully made available by the Linux kernel via /proc. A couple 3rd-party tools (`smem` and `smemstat`) process this information beautifully. (Both are available in Fedora & EPEL.)
@@ -42,11 +42,16 @@ Example output:
 Total:     0.0 B  2308.0 K  3620.0 K    23.2 M
 ```
 
+In The above output, the RSS column is the same one reported by standard tools like `top` and `ps`.
+
+The USS column shows the *Unique Set Size* -- i.e., unshared memory specific to that process. This is the best indicator of how much RAM a particular process is using.
+
+The PSS column shows the *Proportional Set Size* -- i.e., USS + an appropriate proportion of the shared memory. This is usually the best way to gauge the total RAM usage of a group of processes (like all `httpd`).
 
 ### Wait, so what's apache-smemstat?
 This is is a way to quickly summarize smemstat-like information about all httpd processes into a single column-separated line -- e.g., for writing out to a log file regularly.
 
-Here's what the help page look like, including some examples.
+Here's what the help page looks like, including some examples.
 
 ```
 $ apache-smemstat -h
@@ -98,3 +103,7 @@ See also related utilities: smem, smemstat, pidstat
 Version info: apache-smemstat v0.1.0 last mod 2015/11/20
 See <github.com/ryran/apache-smemstat> to report bugs/suggestions or kudos
 ```
+
+### Questions? Comments?
+
+I'd love to hear from you. [File an issue.](https://github.com/ryran/apache-smemstat/issues)
